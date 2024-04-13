@@ -14,8 +14,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "rusteze.helloWorld",
-        "title": "Hello World"
+        "command": "rusteze.rustify",
+        "title": "Convert .c and .h files in current directory to rust"
       }
     ]
   },
