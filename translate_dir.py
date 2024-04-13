@@ -22,15 +22,32 @@ def get_text_from_file(file_path):
 def write_text_to_file(file_path, text):
     with open(file_path, 'w') as file:
         file.write(text)
+# def get_command_output(command, folder=None):
+#     if folder:
+#         # enter the folder first
+#         os.chdir(folder)
+#     output = os.popen(command).read()
+#     if folder:
+#         # return to the previous folder
+#         os.chdir('..')
+#     return output
+
+
+import subprocess
+
 def get_command_output(command, folder=None):
     if folder:
         # enter the folder first
         os.chdir(folder)
-    output = os.popen(command).read()
+        # subprocess.run(['cd', folder], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output = result.stdout.decode('utf-8')
+    errors = result.stderr.decode('utf-8')
     if folder:
         # return to the previous folder
         os.chdir('..')
-    return output
+        # subprocess.run(['cd', '..'], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return output + errors
 
 def get_test_case_output(executable, input_type, input_file, folder):
         if input_type == "filein":
@@ -99,10 +116,35 @@ new_dir = os.path.join(directory,"rust_code")
 #     os.makedirs(new_dir)
 
 
-base_prompt = "You are an expert rust coder. You love memory safety. You will recieve a file with unsafe C code, respond with only safe rust code with identical behavior. People are counting on you to rewrite this code to safe rust. Write no extra comments.\n\nC code:\n\n"
-for root, dirs, files in os.walk(directory):
-    for file in files:
-        if file.endswith(".c"):
-            rust_code = get_full_code(base_prompt + get_text_from_file(os.path.join(root, file)))
-            write_text_to_file(os.path.join(root, file.replace(".c", ".rs")), rust_code)
-            print("Translated " + file + " to Rust")
+def improve_rust_code(rustfile, folder):
+    # Given a rust file, return a string of rust code that is improved that fixes the compiler errors. Rewrite over the file as needed.
+    # Compile the rust code
+    output = get_command_output("rustc " + rustfile, folder)
+    # If there are no errors, return the rust code
+    if "error" not in output:
+        print("No errors found")
+        return
+    print("Had errors: \n"+output)
+    # If there are errors, read the rust code
+    rust_code = get_text_from_file(folder + "/" + rustfile)
+    # Pass this message to the model
+    base_prompt = "You are an expert Rust coder. You love memory safety. You wrote some Rust code that causes a compile error, seen below. Respond with only Rust code that fixes these errors.\n\nRust code:\n\n"
+    rust_code = get_full_code(base_prompt + rust_code + "\n\nOutput from compiling:\n\n" + output)
+    # Write the rust code back to the file
+    write_text_to_file(folder + "/" + rustfile, rust_code)
+    print("Created a new version:")
+    print(rust_code)
+    improve_rust_code(rustfile, folder)    
+
+# improve_rust_code("snake.rs", "snake")
+# improve_rust_code("basic.rs", "vulnerable1")
+
+base_prompt = "You are an expert Rust coder. You love memory safety. You will recieve a file with unsafe C code, respond with only safe rust code with identical behavior - feel free to change datatypes to achieve safer operations (for example, using strings instead of character arrays), but make sure the same functionality is maintained! People are counting on you to rewrite this code to safe rust. Write no extra comments.\n\nC code:\n\n"
+traverse = True
+if traverse:
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(".c"):
+                rust_code = get_full_code(base_prompt + get_text_from_file(os.path.join(root, file)))
+                write_text_to_file(os.path.join(root, file.replace(".c", ".rs")), rust_code)
+                print("Translated " + file + " to Rust")

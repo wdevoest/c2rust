@@ -1,3 +1,6 @@
+extern crate sdl2;
+extern crate rand;
+
 use std::cell::RefCell;
 use std::collections::LinkedList;
 use std::rc::Rc;
@@ -9,6 +12,7 @@ use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::{Window, WindowContext};
+use rand::Rng;
 
 const SCREEN_WIDTH: u32 = 1024;
 const SCREEN_HEIGHT: u32 = 576;
@@ -18,6 +22,7 @@ const BOX_Y: u32 = 72;
 const BOX_W: u32 = 768;
 const BOX_H: u32 = 432;
 
+#[derive(Clone, Copy)]
 enum Direction {
     Up,
     Down,
@@ -60,15 +65,8 @@ fn main() {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let box_ref = Rc::new(RefCell::new(Box {
-        x: BOX_X,
-        y: BOX_Y,
-        w: BOX_W,
-        h: BOX_H,
-    }));
-
-    let mut snake = create_snake(&box_ref);
-    let mut apple = create_apple(&box_ref);
+    let mut snake = create_snake();
+    let mut apple = create_apple();
 
     let fps: u32 = 60;
     let frame_delay = 1000 / fps;
@@ -108,9 +106,8 @@ fn main() {
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
 
-        render_box(&mut canvas, &box_ref.borrow());
-        render_apple(&mut canvas, &apple);
         render_snake(&mut canvas, &snake);
+        render_apple(&mut canvas, &apple);
 
         canvas.present();
 
@@ -124,7 +121,7 @@ fn main() {
     }
 }
 
-fn create_snake(box_ref: &Rc<RefCell<Box>>) -> Rc<RefCell<SnakeCell>> {
+fn create_snake() -> Rc<RefCell<SnakeCell>> {
     let head = Rc::new(RefCell::new(SnakeCell {
         x: TILE_SIZE * 30,
         y: TILE_SIZE * 20,
@@ -132,13 +129,13 @@ fn create_snake(box_ref: &Rc<RefCell<Box>>) -> Rc<RefCell<SnakeCell>> {
         next: None,
     }));
 
-    increase_snake(&head, box_ref);
-    increase_snake(&head, box_ref);
+    increase_snake(&head);
+    increase_snake(&head);
 
     head
 }
 
-fn increase_snake(head: &Rc<RefCell<SnakeCell>>, box_ref: &Rc<RefCell<Box>>) {
+fn increase_snake(head: &Rc<RefCell<SnakeCell>>) {
     let mut tail = head.clone();
     while let Some(next) = &tail.borrow().next {
         tail = next.clone();
@@ -158,7 +155,7 @@ fn increase_snake(head: &Rc<RefCell<SnakeCell>>, box_ref: &Rc<RefCell<Box>>) {
         Direction::Left => Direction::Right,
         Direction::Right => Direction::Left,
     };
-    move_snake_cell(&mut new_tail, box_ref);
+    move_snake_cell(&mut new_tail);
 
     new_tail.next = Some(new_cell);
 }
@@ -191,132 +188,116 @@ fn update_snake(snake: &mut Rc<RefCell<SnakeCell>>, new_direction: Direction, ap
     let prev_y = head.y;
     let prev_d = head.direction;
 
-    if move_snake_cell(&mut head, &*snake.borrow()) == 0 {
-        head.direction = new_direction;
-        let mut tmp_x = head.x;
-        let mut tmp_y = head.y;
-        let mut tmp_d = head.direction;
-        let mut tail = head.next.clone();
+    head.direction = new_direction;
 
-        while let Some(tail_ref) = tail {
-            let mut tail = tail_ref.borrow_mut();
-
-            std::mem::swap(&mut tmp_x, &mut tail.x);
-            std::mem::swap(&mut tmp_y, &mut tail.y);
-            std::mem::swap(&mut tmp_d, &mut tail.direction);
-
-            tail = tail.next.clone();
-        }
-    }
+    let moved = move_snake_cell(&mut head, apple);
 
     if head.x == apple.x && head.y == apple.y {
-        update_apple(&mut *apple, &snake.borrow());
-        increase_snake(snake, &Rc::new(RefCell::new(Box {
-            x: BOX_X,
-            y: BOX_Y,
-            w: BOX_W,
-            h: BOX_H,
-        })));
+        update_apple(&mut *apple, snake);
+        increase_snake(snake);
+    } else {
+        let mut tail = head.next.clone();
+        while let Some(tail_ref) = tail {
+            let mut tail = tail_ref.borrow_mut();
+            let prev_x = tail.x;
+            let prev_y = tail.y;
+            let prev_d = tail.direction;
+            tail.direction = prev_d;
+            tail.x = prev_x;
+            tail.y = prev_y;
+            tail = tail.next.clone();
+        }
+        let mut head = snake.borrow_mut();
+        head.x = prev_x;
+        head.y = prev_y;
+        head.direction = prev_d;
     }
 }
 
-fn move_snake_cell(cell: &mut SnakeCell, box_ref: &Rc<RefCell<Box>>) -> i32 {
-    let new_x = match cell.direction {Direction::Up => cell.x,
+fn move_snake_cell(cell: &mut SnakeCell, apple: &Apple) -> i32 {
+    let new_x = match cell.direction {
+        Direction::Up => cell.x,
         Direction::Down => cell.x,
-        Direction::Left => cell.x - TILE_SIZE,
-        Direction::Right => cell.x + TILE_SIZE,
+        Direction::Left => {
+            if cell.x <= apple.x + TILE_SIZE {
+                cell.x + TILE_SIZE
+            } else {
+                cell.x - TILE_SIZE
+            }
+        },
+        Direction::Right => {
+            if cell.x >= apple.x {
+                cell.x - TILE_SIZE
+            } else {
+                cell.x + TILE_SIZE
+            }
+        },
     };
-
-    let new_y = match cell.direction {
-        Direction::Up => cell.y - TILE_SIZE,
-        Direction::Down => cell.y + TILE_SIZE,
+    let new_y = match cell.direction {...
+        Direction::Up => cell.y,
+        Direction::Down => {
+            if cell.y >= apple.y {
+                cell.y - TILE_SIZE
+            } else {
+                cell.y + TILE_SIZE
+            }
+        },
         Direction::Left => cell.y,
         Direction::Right => cell.y,
     };
 
-    let box_ref = box_ref.borrow();
-    if new_x < box_ref.x || new_x >= box_ref.x + box_ref.w || new_y < box_ref.y || new_y >= box_ref.y + box_ref.h {
-        return 1;
-    }
+    cell.x = new_x;
+    cell.y = new_y;
 
-    let mut can_move = true;
-    let mut tail = cell.next.clone();
+    0
+}
 
-    while let Some(tail_ref) = tail {
-        let tail = tail_ref.borrow();
+fn render_apple(canvas: &mut Canvas<Window>, apple: &Apple) {canvas.set_draw_color(Color::RGB(255, 0, 0));
+canvas.fill_rect(Rect::new(apple.x as i32, apple.y as i32, TILE_SIZE, TILE_SIZE)).unwrap();
+}
 
-        if tail.x == new_x && tail.y == new_y {
-            can_move = false;
+fn create_apple() -> Apple {
+    let mut rng = rand::thread_rng();
+    let mut apple = Apple {
+        x: 0,
+        y: 0,
+    };
+
+    loop {
+        apple.x = rng.gen_range(BOX_X + TILE_SIZE..BOX_X + BOX_W - TILE_SIZE);
+        apple.y = rng.gen_range(BOX_Y + TILE_SIZE..BOX_Y + BOX_H - TILE_SIZE);
+
+        if !is_on_snake(&apple, &snake.next) {
             break;
         }
-
-        tail = tail.next.clone();
     }
 
-    if can_move {
-        cell.x = new_x;
-        cell.y = new_y;
-        return 0;
-    }
-
-    1
+    apple
 }
 
-fn render_box(canvas: &mut Canvas<Window>, box_ref: &Box) {
-    let box_color = Color::RGB(50, 50, 50);
+fn is_on_snake(apple: &Apple, snake: &SnakeCell) -> bool {
+    let mut snake = snake;
 
-    let box_rect = Rect::new(box_ref.x as i32, box_ref.y as i32, box_ref.w, box_ref.h);
-    canvas.set_draw_color(box_color);
-    canvas.draw_rect(box_rect).unwrap();
+    while let Some(next) = &snake.next {
+        if apple.x == snake.x && apple.y == snake.y {
+            return true;
+        }
+
+        snake = next;
+    }
+
+    false
 }
 
-fn create_apple(box_ref: &Rc<RefCell<Box>>) -> Apple {
-    let mut x = (rand::random::<u32>() % (box_ref.borrow().w - BOX_X + 1) + BOX_X) as i32;
-    let mut y = (rand::random::<u32>() % (box_ref.borrow().h - BOX_Y + 1) + BOX_Y) as i32;
+fn update_apple(apple: &mut Apple, snake: &SnakeCell) {
+    let mut rng = rand::thread_rng();
 
-    let remainder_x = x % (TILE_SIZE as i32);
-    if remainder_x < (TILE_SIZE / 2) as i32 {
-        x -= remainder_x;
-    } else {
-        x += (TILE_SIZE - remainder_x) as i32;
+    loop {
+        apple.x = rng.gen_range(snake.x..snake.x + snake.w - TILE_SIZE);
+        apple.y = rng.gen_range(snake.y..snake.y + snake.h - TILE_SIZE);
+
+        if !is_on_snake(&apple, &snake.next) {
+            break;
+        }
     }
-
-    let remainder_y = y % (TILE_SIZE as i32);
-    if remainder_y < (TILE_SIZE / 2) as i32 {
-        y -= remainder_y;
-    } else {
-        y += (TILE_SIZE - remainder_y) as i32;
-    }
-
-    Apple { x: x as u32, y: y as u32 }
-}
-
-fn render_apple(canvas: &mut Canvas<Window>, apple: &Apple) {
-    let apple_color = Color::RGB(200, 0, 0);
-
-    let apple_rect = Rect::new(apple.x as i32, apple.y as i32, TILE_SIZE, TILE_SIZE);
-    canvas.set_draw_color(apple_color);
-    canvas.fill_rect(apple_rect).unwrap();
-}
-
-fn update_apple(apple: &mut Apple, box_ref: &Box) {
-    let mut x = (rand::random::<u32>() % (box_ref.w - BOX_X + 1) + BOX_X) as i32;
-    let mut y = (rand::random::<u32>() % (box_ref.h - BOX_Y + 1) + BOX_Y) as i32;
-
-    let remainder_x = x % (TILE_SIZE as i32);
-    if remainder_x < (TILE_SIZE / 2) as i32 {
-        x -= remainder_x;
-    } else {
-        x += (TILE_SIZE - remainder_x) as i32;
-    }
-
-    let remainder_y = y % (TILE_SIZE as i32);
-    if remainder_y < (TILE_SIZE / 2) as i32 {
-        y -= remainder_y;
-    } else {
-        y += (TILE_SIZE - remainder_y) as i32;
-    }
-
-    apple.x = x as u32;
-    apple.y = y as u32;
 }
