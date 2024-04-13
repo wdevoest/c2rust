@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::{stdin, Read};
 
 #[derive(Debug)]
 struct Student {
@@ -7,14 +7,13 @@ struct Student {
 }
 
 fn main() {
-    let mut student = Student {
-        name: String::new(),
-        grade: "nil".to_string(),
+    let mut stu = Student {
+        grade: String::from("nil"),
+        ..Default::default()
     };
 
-    print!("Enter your name: ");
-    io::stdout().flush().expect("Could not flush stdout");
-    io::stdin().read_line(&mut student.name).expect("Could not read line");
+    stdin().read_line(&mut stu.name).unwrap();
+    stu.name = stu.name.trim().to_string();
 
-    println!("Hi {}! Your grade is {}.", student.name, student.grade);
+    println!("Hi {}! Your grade is {}.", stu.name, stu.grade);
 }
