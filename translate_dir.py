@@ -1,8 +1,9 @@
 import google.generativeai as genai
 import os
 import sys
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-def load_dotenv(dotenv_path=".env"):
+def load_dotenv(dotenv_path="C:\\Users\\alexa\\Code\\c2rust\\.env"):
     with open(dotenv_path, "r") as f:
         for line in f:
             if line.strip() and not line.startswith("#"):
@@ -17,7 +18,7 @@ genai.configure(api_key=GOOGLE_API_KEY)
 
 # Get text from a file
 def get_text_from_file(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         return file.read()
 def write_text_to_file(file_path, text):
     with open(file_path, 'w') as file:
@@ -58,16 +59,39 @@ def get_test_case_output(executable, input_type, input_file, folder):
             print("Invalid input type")
             return None
 
+using15model = False
 
-# model = genai.GenerativeModel('gemini-1.5-pro-latest')
-model = genai.GenerativeModel('gemini-pro')
+model_name = 'gemini-1.5-pro-latest' if using15model else 'gemini-pro'
+
+model = genai.GenerativeModel(model_name)
+
+rust_book = None
+if using15model:
+    filename = "rust book.txt"
+    # Currently not supported
+    # rust_book_file = genai.upload_file(path=filename,
+    #                             display_name="Rust Book Documentation")
+    # rust_book = genai.get_file(name=rust_book_file.name)
+    # rust_book_file = get_text_from_file(filename)
 
 def get_full_code(prompt):
-    messages = [
-        {'role':'user',
-        'parts': [prompt]}
-    ]
-    response = model.generate_content(messages)
+    if using15model:
+        messages = [
+            # {'role':'user', 'parts': ['Please consider the Rust documentation:\n\n'+rust_book_file]},
+            {'role':'user',
+            'parts': [prompt]}
+        ]
+    else:
+        messages = [
+            {'role':'user',
+            'parts': [prompt]}
+        ]
+    response = model.generate_content(messages, safety_settings={
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    })
     # print(response.text)
     data = response.text
     # Remove the leading ``` and everything on that line
@@ -93,7 +117,12 @@ def get_full_code(prompt):
                     'parts':[response.text]})
         messages.append({'role':'user',
                         'parts':[f"Continue from where you finished. Start by rewriting the last line you wrote (so start with {last_line})."]})
-        response = model.generate_content(messages)
+        response = model.generate_content(messages, safety_settings={
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        })
         # print(response.text)
         new_data = response.text
         
@@ -128,7 +157,10 @@ def improve_rust_code(rustfile, folder):
     # If there are errors, read the rust code
     rust_code = get_text_from_file(folder + "/" + rustfile)
     # Pass this message to the model
-    base_prompt = "You are an expert Rust coder. You love memory safety. You wrote some Rust code that causes a compile error, seen below. Respond with only Rust code that fixes these errors.\n\nRust code:\n\n"
+    if using15model:
+        base_prompt = "You are an expert Rust coder. You love memory safety. You wrote some Rust code that causes a compile error, seen below. Respond with only Rust code that fixes these errors.\n\nRust code:\n\n"
+    else:
+        base_prompt = "You are an expert Rust coder. You love memory safety. You wrote some Rust code that causes a compile error, seen below. You are provided with the Rust documentation to help with translation. Respond with only Rust code that fixes these errors.\n\nRust code:\n\n"
     rust_code = get_full_code(base_prompt + rust_code + "\n\nOutput from compiling:\n\n" + output)
     # Write the rust code back to the file
     write_text_to_file(folder + "/" + rustfile, rust_code)

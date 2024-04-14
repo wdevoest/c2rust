@@ -47,11 +47,11 @@ function activate(context) {
             const wsedit = new vscode.WorkspaceEdit();
             const wsPath = vscode.workspace.workspaceFolders[0].uri.fsPath; // gets the path of the first workspace folder
             const filePath = vscode.Uri.file(wsPath + '/hello/world.md');
-            vscode.window.showInformationMessage(filePath.toString());
+            // vscode.window.showInformationMessage(filePath.toString());
             wsedit.createFile(filePath, { ignoreIfExists: true });
             vscode.workspace.applyEdit(wsedit);
-            vscode.window.showInformationMessage('Created a new file: hello/world.md');
-            const pythonProcess = await spawn('python3', ['Users/alexs/documents/mhacks24/c2rust/test.py', wsPath]);
+            console.log("Starting python");
+            const pythonProcess = await spawn('python3', ['C:\\Users\\alexa\\Code\\c2rust\\translate_dir.py', wsPath]);
             let output = '';
             pythonProcess.stdout.on('data', (data) => {
                 output += data.toString();
@@ -67,6 +67,7 @@ function activate(context) {
                 else {
                     console.log(`Python script output: ${output}`);
                     // ... further processing of the output ...
+                    vscode.window.showInformationMessage('Rust files created!');
                 }
             });
         }
